@@ -72,6 +72,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import net.openid.appauth.AuthorizationException
 import net.openid.appauth.AuthorizationRequest
 import net.openid.appauth.AuthorizationResponse
@@ -415,7 +416,7 @@ constructor(
     onDone: () -> Unit = {},
     onError: (String) -> Unit = {},
   ) {
-    viewModelScope.launch(Dispatchers.Default) {
+    viewModelScope.launch {
       // Skip if initialized already.
       if (
         !force &&
@@ -470,14 +471,16 @@ constructor(
 
       // Call the model initialization function.
       val systemPrompt = SystemPromptHelper.getEffectiveSystemPrompt(systemPromptRepository, task)
-      getCustomTaskByTaskId(id = task.id)
-        ?.initializeModelFn(
-          context = context,
-          coroutineScope = viewModelScope,
-          model = model,
-          systemInstruction = Contents.of(systemPrompt),
-          onDone = onDoneFn,
-        )
+      withContext(Dispatchers.IO) {
+        getCustomTaskByTaskId(id = task.id)
+          ?.initializeModelFn(
+            context = context,
+            coroutineScope = viewModelScope,
+            model = model,
+            systemInstruction = Contents.of(systemPrompt),
+            onDone = onDoneFn,
+          )
+      }
     }
   }
 
@@ -1010,9 +1013,10 @@ constructor(
             for (modelName in task.modelNames) {
               val model = nameToModel[modelName]
               if (model == null) {
-                Log.w(TAG, "Model '${modelName}' in task '${task.label}' not found in allowlist.")
+                Log.w(TAG, "Model '$modelName' in task '${task.label}' not found in allowlist.")
                 continue
               }
+              Log.d(TAG, "Adding model '$modelName' to task '${task.label}' from modelNames.")
               task.models.add(model)
             }
           }
